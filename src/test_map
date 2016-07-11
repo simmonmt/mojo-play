@@ -1,0 +1,3 @@
+src/mux.vhd src/mux_test.vhd
+src/flipflop.vhd src/dff_test.vhd
+src/counter.vhd src/counter_test.vhd

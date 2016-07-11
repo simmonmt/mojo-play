@@ -1,0 +1,124 @@
+#!/bin/bash
+
+function usage() {
+  echo "Usage: ${PROGNAME} test_map" >&2
+  exit 2
+}
+
+function die() {
+  echo "${PROGNAME}:" "$@" >&2
+  trap "" EXIT
+  cleanup
+  exit 1
+}
+
+function diecat() {
+  cat $1
+  shift
+  die "$@"
+}
+
+function cleanup() {
+  rm -fr ${TMPDIR}
+}
+
+function make_proj() {
+  local out=$1
+  local src_file=$2
+  local test_file=$3
+
+  cat >${out} <<EOF
+vhdl work "${src_file}"
+vhdl work "${test_file}"
+EOF
+}
+
+function entity_from_test() {
+  local test_file=$1
+  egrep -i '^entity [^ ]* is' $test_file |awk '{print $2;}'
+}
+
+function run_test() {
+  local src_file=$1
+  local test_file=$2
+
+  local proj_file=${TMPDIR}/test.prj
+  make_proj ${proj_file} ${PWD}/${src_file} ${PWD}/${test_file}
+
+  local entity_name=$(entity_from_test ${test_file})
+  [[ -z "${entity_name}" ]] && \
+    die "failed to find single entity in ${test_file}"
+
+  local unit_name=work.$(entity_from_test ${test_file})
+
+  mkdir -p ${TMPDIR}/isim/work
+  
+  (cd ${TMPDIR} ; fuse \
+    -intstyle ise \
+    -incremental \
+    -lib secureip \
+    -o ${TMPDIR}/test.exe \
+    -prj ${proj_file} \
+    ${unit_name} >/dev/null ) || \
+    diecat ${TMPDIR}/fuse.log "failed to compile ${proj_file}"
+
+  local test_log=${TMPDIR}/test.log
+  (cd ${TMPDIR} ; ./test.exe \
+    -log ${test_log} \
+    -tclbatch ${CMDFILE} >/dev/null) || \
+    diecat ${test_log} "failed to run test ${proj_file}"
+
+  if grep -q '^at' ${test_log} ; then
+    cat ${test_log}
+    return 1
+  fi
+}
+
+PROGNAME=$(basename "$0")
+
+SRCDIR=${PWD}
+[[ -d ${SRCDIR} ]] || die "No src dir in pwd"
+
+SYNDIR=${PWD}/syn
+[[ -d ${SYNDIR} ]] || die "No syn dir in pwd"
+
+type -P fuse >/dev/null 2>&1 || die "fuse not in PATH. ISE vars dotted?"
+
+[[ $# -eq 1 ]] || usage
+TEST_MAP="$1"
+
+TMPDIR=$(mktemp -d)
+trap "{ cleanup ; exit 0; }" EXIT
+
+CMDFILE=${TMPDIR}/isim_cmd.tcl
+cat >$CMDFILE <<EOF
+  wave add /
+  run 1000 ns
+  quit
+EOF
+
+num_tests=0
+num_success=0
+num_fail=0
+
+while read line ; do
+  set -- ${line}
+  src_file=$1
+  test_file=$2
+
+  echo == ${test_file}...
+  run_test ${src_file} ${test_file}
+  if [[ $? -eq 0 ]] ; then
+    num_success=$((num_success + 1))
+    result="PASS"
+  else
+    num_fail=$((num_fail + 1))
+    result="FAIL"
+  fi
+  num_tests=$((num_tests + 1))
+
+  echo == ${test_file}...${result}
+done <<< "$(grep -v '^#' ${TEST_MAP})"
+
+echo "Summary: num tests: ${num_tests}; success: ${num_success}; fail: ${num_fail}"
+[[ ${num_fail} -gt 1 ]] && exit 1
