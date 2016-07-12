@@ -1,3 +1,9 @@
+-- Implements a counter, whose results are displayed in binary using eight LEDs
+-- The counter is advanced with each press of a debounced normally-high button
+-- attached as BTN.
+--
+-- Target hardware: Mojo v3 FPGA board
+
 library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
 use IEEE.NUMERIC_STD.ALL;
@@ -28,8 +34,8 @@ architecture arch of base is
           Q    : out std_logic_vector(BIT_WIDTH-1 downto 0));
   end component;
   
-  signal button_raw : std_logic;
-  signal button : std_logic;
+  signal button_raw : std_logic;  -- Undebounced normaly-low BTN
+  signal button : std_logic;      -- Debounced normally-low BTN
 
 begin
   button_raw <= not BTN_N;
@@ -43,12 +49,8 @@ begin
     generic map (BIT_WIDTH => 8)
     port map (CLR => '0',
               CLK => button,
---              CLK => button_raw,
               EN => '1',
               Q => LED);
-
---  LED(0) <= button_raw;
---  LED(7 downto 1) <= "0000000";
 
 end arch;
 

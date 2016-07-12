@@ -1,7 +1,19 @@
+-- Debounces button input by watching the input value over a period of time.
+--
+-- Implemented from the schematic at 
+-- https://eewiki.net/pages/viewpage.action?pageId=4980758
+--
+-- There are certainly more terse ways to implement this (whether that means
+-- more efficient, I don't have the VHDL experience to judge), but this
+-- implementation was easy to validate, test, and understand.
+
 library IEEE;
 use IEEE.STD_LOGIC_1164.ALL;
 use IEEE.NUMERIC_STD.ALL;
 
+-- The value of BTN is sampled once every CLK until the value stays the same
+-- long enough for the counter (which is reset when the value changes) to
+-- overflow. COUNTER_WIDTH sets the bit width of the counter.
 entity debounce is
   generic (COUNTER_WIDTH : integer := 19);
 
